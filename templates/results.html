@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>分析结果</title>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <style>
+        body {
+            padding-top: 5rem;
+        }
+        .file-result-container {
+            margin-bottom: 3rem;
+            padding: 1.5rem;
+            border: 1px solid #cce5ff; /* Light blue border */
+            border-radius: .3rem;
+            background-color: #f8f9fa; /* Light grey background for the container */
+        }
+        .result-item {
+            margin-bottom: 2rem;
+            border: 1px solid #ddd; /* Border for individual page item */
+            padding: 1rem;
+            border-radius: .25rem;
+            background-color: #fff; /* White background for page item */
+        }
+        .result-item img {
+            max-width: 100%;
+            height: auto;
+            margin-bottom: 1rem;
+            border: 1px solid #eee;
+        }
+        .analysis-text {
+            white-space: pre-wrap; /* 保留换行和空格 */
+            background-color: #f8f9fa;
+            padding: 0.5rem;
+            border-radius: .25rem;
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-md navbar-dark bg-dark fixed-top">
+        <a class="navbar-brand" href="{{ url_for('index') }}">PDF 分析器</a>
+    </nav>
+
+    <main role="main" class="container">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1>分析结果</h1>
+            <a href="{{ url_for('index') }}" class="btn btn-secondary">返回首页</a>
+        </div>
+
+        {% if all_files_results %}
+            <div class="mb-3">
+                <a href="{{ url_for('export_all_markdown_zip') }}" class="btn btn-primary">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-file-earmark-zip-fill" viewBox="0 0 16 16">
+                        <path d="M.5 3.5A1.5 1.5 0 0 1 2 2h3.5S7 2 8 3.5V4H2V3.5ZM11 2H7.5V1.159c0-.563.24-1.007.603-1.007.292 0 .488.162.665.385l1.13 1.284c.14.159.261.25.33.268.073.018.144.02.203.02h.5V2Z"/>
+                        <path d="M.5 4.5A1.5 1.5 0 0 1 2 3h8.5A1.5 1.5 0 0 1 12 4.5v7a1.5 1.5 0 0 1-1.5 1.5H2A1.5 1.5 0 0 1 .5 11.5v-7zM8.5 7.5a1 1 0 0 0-1 1v1h-1v-1a1 1 0 0 0-2 0v1H3.5v-2a1 1 0 0 0-1-1H2v3h1.5v-1h1v1H6v-1h1v1H8.5v-3h-1Z"/>
+                        <path d="M12.5 3a.5.5 0 0 0-.5-.5h-1a.5.5 0 0 0 0 1h1a.5.5 0 0 0 .5-.5M11 4.5H2.525a.5.5 0 0 1 0-1H11a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5"/>
+                    </svg>
+                    全部导出为 Markdown (ZIP)
+                </a>
+            </div>
+
+            {% for file_result in all_files_results %}
+                <div class="file-result-container">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <h3>文件: {{ file_result.original_filename }}</h3>
+                        {% if not file_result.error and file_result.page_results %}
+                            <a href="{{ url_for('export_markdown', original_filename=file_result.original_filename) }}" class="btn btn-sm btn-outline-success">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-download" viewBox="0 0 16 16">
+                                    <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"/>
+                                    <path d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708l3 3z"/>
+                                </svg>
+                                导出为 Markdown
+                            </a>
+                        {% endif %}
+                    </div>
+                    {% if file_result.error %}
+                        <div class="alert alert-danger" role="alert">
+                            处理此文件时出错: {{ file_result.error }}
+                        </div>
+                    {% elif file_result.page_results %}
+                        {% for page_item in file_result.page_results %}
+                            <div class="result-item">
+                                <h5>页面图像:</h5>
+                                <img src="{{ url_for('uploaded_file_image', filepath=page_item.image_web_path) }}" alt="PDF 页面图像 (来自 {{ file_result.original_filename }})">
+                                <h5>分析文本:</h5>
+                                <div class="analysis-text">
+                                    {{ page_item.analysis }}
+                                </div>
+                            </div>
+                        {% endfor %}
+                    {% else %}
+                         <div class="alert alert-info" role="alert">
+                            此文件没有可显示的页面分析结果。
+                        </div>
+                    {% endif %}
+                </div>
+            {% endfor %}
+        {% else %}
+            <div class="alert alert-warning" role="alert">
+                没有可显示的分析结果。
+            </div>
+        {% endif %}
+
+        <div class="mt-4 text-center">
+            <a href="{{ url_for('index') }}" class="btn btn-primary">上传另一个 PDF</a>
+        </div>
+    </main>
+
+    <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.5.3/dist/umd/popper.min.js"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+</body>
+</html>
