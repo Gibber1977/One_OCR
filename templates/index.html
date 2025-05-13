@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>PDF 内容分析器</title>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <style>
+        body {
+            padding-top: 5rem;
+            padding-bottom: 2rem;
+        }
+        .container {
+            max-width: 700px;
+        }
+        .custom-file-input ~ .custom-file-label::after {
+            content: "浏览";
+        }
+        .llm-config-section {
+            background-color: #f8f9fa;
+            padding: 20px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        .api-key-inputs label {
+            font-weight: bold;
+        }
+        .api-key-inputs input, .api-key-inputs select {
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-md navbar-dark bg-dark fixed-top">
+        <a class="navbar-brand" href="{{ url_for('index') }}">PDF 分析器</a>
+    </nav>
+
+    <main role="main" class="container">
+        <div class="jumbotron">
+            <h1>上传 PDF 文件进行分析</h1>
+            <p class="lead">选择 LLM 提供商，配置 API 密钥、模型和可选的 Base URL，然后上传 PDF 文件进行分析。</p>
+        </div>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                        {{ message }}
+                        <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                            <span aria-hidden="true">&times;</span>
+                        </button>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <form method="post" enctype="multipart/form-data" action="{{ url_for('index') }}">
+            
+            <div class="llm-config-section">
+                <h2>LLM 配置</h2>
+                <div class="form-group">
+                    <label for="llm_provider">选择 LLM 提供商:</label>
+                    <select class="form-control" id="llm_provider" name="llm_provider">
+                        <option value="gemini">Gemini</option>
+                        <option value="openai">OpenAI</option>
+                        <option value="volcano">火山引擎 (OpenAI 兼容)</option>
+                    </select>
+                </div>
+
+                <div class="api-key-inputs">
+                    <div class="form-group" id="gemini_api_key_group">
+                        <label for="gemini_api_key">Gemini API Key:</label>
+                        <input type="password" class="form-control" id="gemini_api_key" name="gemini_api_key" placeholder="输入 Gemini API Key (可选, 若 .env 中已配置)">
+                    </div>
+                    <div id="openai_specific_configs" style="display: none;">
+                        <div class="form-group" id="openai_api_key_group">
+                            <label for="openai_api_key">OpenAI API Key:</label>
+                            <input type="password" class="form-control" id="openai_api_key" name="openai_api_key" placeholder="输入 OpenAI API Key (可选, 若 .env 中已配置)">
+                        </div>
+                        <div class="form-group" id="openai_base_url_group">
+                            <label for="openai_base_url">OpenAI Base URL (可选):</label>
+                            <input type="text" class="form-control" id="openai_base_url" name="openai_base_url" placeholder="例如 https://api.example.com/v1">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="selected_model_name">选择模型 (从列表):</label>
+                    <select class="form-control" id="selected_model_name" name="selected_model_name">
+                        <option value="">-- 请先选择提供商并输入API Key (如果需要) --</option>
+                    </select>
+                     <small class="form-text text-muted">模型列表将根据提供商和API密钥动态加载。</small>
+                </div>
+                 <div class="form-group">
+                    <label for="custom_model_name">或手动输入模型名称 (可选):</label>
+                    <input type="text" class="form-control" id="custom_model_name" name="custom_model_name" placeholder="例如 gemini-1.5-pro-latest 或 gpt-4-turbo">
+                    <small class="form-text text-muted">如果填写此项，将优先使用此模型名称。</small>
+                </div>
+                <button type="button" class="btn btn-info btn-sm mb-2" id="fetch_models_btn">刷新模型列表</button>
+                <button type="button" class="btn btn-secondary btn-sm mb-2" id="save_llm_settings_btn">保存LLM设置到浏览器</button>
+            </div>
+
+            <div class="form-group">
+                <label for="file">选择 PDF 文件</label>
+                <div class="custom-file">
+                    <input type="file" class="custom-file-input" id="file" name="file" accept=".pdf" required multiple>
+                    <label class="custom-file-label" for="file" data-browse="选择文件">选择一个或多个文件...</label>
+                </div>
+                <small class="form-text text-muted">最大文件大小: 16MB. 只接受 PDF 文件。</small>
+            </div>
+            <div class="form-group">
+                <label for="custom_system_prompt">自定义系统提示 (可选)</label>
+                <textarea class="form-control" id="custom_system_prompt" name="custom_system_prompt" rows="5" placeholder="在此输入您的自定义系统提示，如果留空，将使用默认提示。">{{ default_system_prompt }}</textarea>
+                <small class="form-text text-muted">此提示将用于指导 LLM 分析您的 PDF 内容。</small>
+            </div>
+            <button type="submit" class="btn btn-primary btn-block">上传并分析</button>
+        </form>
+    </main>
+
+    <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.5.3/dist/umd/popper.min.js"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+    <script>
+        $(document).ready(function() {
+            // Update custom file input label
+            $('.custom-file-input').on('change', function(event) {
+                var inputFile = event.target;
+                var files = inputFile.files;
+                if (files.length > 1) {
+                    $(inputFile).next('.custom-file-label').html(files.length + ' 个文件已选择');
+                } else if (files.length === 1) {
+                    $(inputFile).next('.custom-file-label').html(files[0].name);
+                } else {
+                    $(inputFile).next('.custom-file-label').html('选择一个或多个文件...');
+                }
+            });
+
+            const llmProviderSelect = $('#llm_provider');
+            const geminiApiKeyGroup = $('#gemini_api_key_group');
+            const openaiSpecificConfigs = $('#openai_specific_configs'); // Container for OpenAI key and base_url
+            const geminiApiKeyInput = $('#gemini_api_key');
+            const openaiApiKeyInput = $('#openai_api_key');
+            const openaiBaseUrlInput = $('#openai_base_url');
+            const modelSelect = $('#selected_model_name');
+            const customModelNameInput = $('#custom_model_name');
+            const saveSettingsBtn = $('#save_llm_settings_btn');
+            const fetchModelsBtn = $('#fetch_models_btn');
+            const customSystemPrompt = $('#custom_system_prompt');
+
+            function saveLLMSettings() {
+                localStorage.setItem('llm_provider', llmProviderSelect.val());
+                localStorage.setItem('gemini_api_key', geminiApiKeyInput.val());
+                localStorage.setItem('openai_api_key', openaiApiKeyInput.val());
+                localStorage.setItem('openai_base_url', openaiBaseUrlInput.val());
+                localStorage.setItem('selected_model_name', modelSelect.val()); // Save selected from dropdown
+                localStorage.setItem('custom_model_name', customModelNameInput.val()); // Save custom input
+                localStorage.setItem('custom_system_prompt', customSystemPrompt.val());
+                alert('LLM 设置已保存到浏览器！');
+            }
+
+            function loadLLMSettings() {
+                const savedProvider = localStorage.getItem('llm_provider');
+                const savedGeminiKey = localStorage.getItem('gemini_api_key');
+                const savedOpenAIKey = localStorage.getItem('openai_api_key');
+                const savedOpenAIBaseUrl = localStorage.getItem('openai_base_url');
+                const savedSelectedModel = localStorage.getItem('selected_model_name');
+                const savedCustomModel = localStorage.getItem('custom_model_name');
+                const savedPrompt = localStorage.getItem('custom_system_prompt');
+
+                if (savedProvider) llmProviderSelect.val(savedProvider);
+                if (savedGeminiKey) geminiApiKeyInput.val(savedGeminiKey);
+                if (savedOpenAIKey) openaiApiKeyInput.val(savedOpenAIKey);
+                if (savedOpenAIBaseUrl) openaiBaseUrlInput.val(savedOpenAIBaseUrl);
+                if (savedCustomModel) customModelNameInput.val(savedCustomModel); // Load custom model name
+                // savedSelectedModel will be used by fetchModels to pre-select if available
+
+                if (savedPrompt) customSystemPrompt.val(savedPrompt);
+                
+                updateApiKeyVisibility(); 
+                
+                if (savedProvider) {
+                    fetchModels(savedProvider, savedSelectedModel); 
+                }
+            }
+
+            function updateApiKeyVisibility() {
+                const selectedProvider = llmProviderSelect.val();
+                if (selectedProvider === 'gemini') {
+                    geminiApiKeyGroup.show();
+                    openaiSpecificConfigs.hide();
+                } else if (selectedProvider === 'openai' || selectedProvider === 'volcano') { // Show OpenAI configs for OpenAI and Volcano
+                    geminiApiKeyGroup.hide();
+                    openaiSpecificConfigs.show();
+                } else {
+                    geminiApiKeyGroup.hide();
+                    openaiSpecificConfigs.hide();
+                }
+            }
+
+            function fetchModels(provider, selectedModelFromStorage = null) {
+                let apiKey = '';
+                let payload = {};
+
+                if (provider === 'gemini') {
+                    apiKey = geminiApiKeyInput.val() || localStorage.getItem('gemini_api_key');
+                    payload = { api_key: apiKey };
+                } else if (provider === 'openai') {
+                    apiKey = openaiApiKeyInput.val() || localStorage.getItem('openai_api_key');
+                    const baseUrl = openaiBaseUrlInput.val() || localStorage.getItem('openai_base_url');
+                    payload = { api_key: apiKey };
+                    if (baseUrl) payload.base_url = baseUrl;
+                } else {
+                    modelSelect.html('<option value="">-- 请选择提供商 --</option>');
+                    customModelNameInput.val(''); // Clear custom model input too
+                    return;
+                }
+                
+                modelSelect.html('<option value="">正在加载模型...</option>');
+                console.log(`Fetching models for ${provider} with key: ${apiKey ? apiKey.substring(0,5)+'...' : 'N/A'}`);
+
+                $.ajax({
+                    url: `/api/get_models/${provider}`,
+                    type: 'POST',
+                    contentType: 'application/json',
+                    data: JSON.stringify(payload),
+                    success: function(data) {
+                        modelSelect.empty();
+                        if (data.error) {
+                            modelSelect.append($('<option>', { value: '', text: `错误: ${data.error}` }));
+                        } else if (data.models && data.models.length > 0) {
+                            modelSelect.append($('<option>', { value: '', text: '-- 从列表选择模型 --' }));
+                            data.models.forEach(function(model) {
+                                let displayName = model.display_name || model.id;
+                                modelSelect.append($('<option>', { value: model.id, text: displayName }));
+                            });
+                            if (selectedModelFromStorage) { // Pre-select if a value was loaded
+                                modelSelect.val(selectedModelFromStorage);
+                            }
+                        } else {
+                            modelSelect.append($('<option>', { value: '', text: '未找到可用模型 (可手动输入)' }));
+                        }
+                    },
+                    error: function(jqXHR, textStatus, errorThrown) {
+                        const errorMsg = (jqXHR.responseJSON && jqXHR.responseJSON.error) ? jqXHR.responseJSON.error : textStatus;
+                        modelSelect.html(`<option value="">加载模型失败: ${errorMsg}</option>`);
+                        console.error(`AJAX error fetching models for ${provider}: ${textStatus}, ${errorThrown}`, jqXHR.responseJSON);
+                    }
+                });
+            }
+
+            llmProviderSelect.on('change', function() {
+                updateApiKeyVisibility();
+                fetchModels($(this).val()); // Fetch models for the newly selected provider
+            });
+            
+            fetchModelsBtn.on('click', function() {
+                const currentProvider = llmProviderSelect.val();
+                if (currentProvider) {
+                    fetchModels(currentProvider);
+                } else {
+                    alert("请先选择一个 LLM 提供商。");
+                }
+            });
+
+            saveSettingsBtn.on('click', saveLLMSettings);
+
+            loadLLMSettings(); 
+        });
+    </script>
+</body>
+</html>
