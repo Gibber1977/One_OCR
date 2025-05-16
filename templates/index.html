@@ -64,6 +64,7 @@
                         <option value="gemini">Gemini</option>
                         <option value="openai">OpenAI</option>
                         <option value="volcano">火山引擎 (OpenAI 兼容)</option>
+                        <option value="google">Google (OpenAI 兼容)</option>
                     </select>
                 </div>
 
@@ -109,7 +110,16 @@
                 <small class="form-text text-muted">最大文件大小: 16MB. 只接受 PDF 文件。</small>
             </div>
             <div class="form-group">
-                <label for="custom_system_prompt">自定义系统提示 (可选)</label>
+                <label for="preset_prompts">预设系统提示</label>
+                <select class="form-control mb-2" id="preset_prompts">
+                    <option value="">-- 选择预设提示或自定义 --</option>
+                    <option value="ocr">OCR提取（仅提取文字内容）</option>
+                    <option value="analyze">内容分析（分析图像内容）</option>
+                    <option value="analyze_and_ocr">图像分析与OCR（智能判断）</option>
+                </select>
+                <small class="form-text text-muted mb-2">选择预设提示或在下方输入自定义提示。</small>
+                
+                <label for="custom_system_prompt">自定义系统提示</label>
                 <textarea class="form-control" id="custom_system_prompt" name="custom_system_prompt" rows="5" placeholder="在此输入您的自定义系统提示，如果留空，将使用默认提示。">{{ default_system_prompt }}</textarea>
                 <small class="form-text text-muted">此提示将用于指导 LLM 分析您的 PDF 内容。</small>
             </div>
@@ -145,7 +155,23 @@
             const customModelNameInput = $('#custom_model_name');
             const saveSettingsBtn = $('#save_llm_settings_btn');
             const fetchModelsBtn = $('#fetch_models_btn');
+            const presetPrompts = $('#preset_prompts');
             const customSystemPrompt = $('#custom_system_prompt');
+            
+            // 预设提示内容
+            const promptTemplates = {
+                'ocr': 'You are an OCR bot, and your task is to convert the picture information I send to you into the corresponding text message. It is required to output only all text after OCR scanning, and the sentence should be as complete as possible.As much as possible, one image corresponds to one output text.For example, if the image I gave you has three columns and some markers, you should match as much as possible which part of each piece of text belongs to the preceding and subsequent parts, and splice them together.You don\'t have to stick to the layout of the original image, you can convert the original text to Markdown format for more information.Pay attention to distinguish between multi-level headings and other information (represented by # in Markdown syntax)',
+                'analyze': 'Analyze the content of this image. If it contains text, describe the image content.',
+                'analyze_and_ocr': 'Analyze the content of this image. If it contains text, perform OCR and return the recognized text. If it\'s an image without significant text, describe the image content.'
+            };
+            
+            // 当选择预设提示时，更新文本框内容
+            presetPrompts.on('change', function() {
+                const selectedTemplate = $(this).val();
+                if (selectedTemplate && promptTemplates[selectedTemplate]) {
+                    customSystemPrompt.val(promptTemplates[selectedTemplate]);
+                }
+            });
 
             function saveLLMSettings() {
                 localStorage.setItem('llm_provider', llmProviderSelect.val());
@@ -154,6 +180,7 @@
                 localStorage.setItem('openai_base_url', openaiBaseUrlInput.val());
                 localStorage.setItem('selected_model_name', modelSelect.val()); // Save selected from dropdown
                 localStorage.setItem('custom_model_name', customModelNameInput.val()); // Save custom input
+                localStorage.setItem('preset_prompt_selection', presetPrompts.val());
                 localStorage.setItem('custom_system_prompt', customSystemPrompt.val());
                 alert('LLM 设置已保存到浏览器！');
             }
@@ -165,7 +192,10 @@
                 const savedOpenAIBaseUrl = localStorage.getItem('openai_base_url');
                 const savedSelectedModel = localStorage.getItem('selected_model_name');
                 const savedCustomModel = localStorage.getItem('custom_model_name');
+                const savedPresetSelection = localStorage.getItem('preset_prompt_selection');
                 const savedPrompt = localStorage.getItem('custom_system_prompt');
+                
+                if (savedPresetSelection) presetPrompts.val(savedPresetSelection);
 
                 if (savedProvider) llmProviderSelect.val(savedProvider);
                 if (savedGeminiKey) geminiApiKeyInput.val(savedGeminiKey);
@@ -188,7 +218,7 @@
                 if (selectedProvider === 'gemini') {
                     geminiApiKeyGroup.show();
                     openaiSpecificConfigs.hide();
-                } else if (selectedProvider === 'openai' || selectedProvider === 'volcano') { // Show OpenAI configs for OpenAI and Volcano
+                } else if (selectedProvider === 'openai' || selectedProvider === 'volcano' || selectedProvider === 'google') { // Show OpenAI configs for OpenAI, Volcano and Google
                     geminiApiKeyGroup.hide();
                     openaiSpecificConfigs.show();
                 } else {
@@ -204,7 +234,7 @@
                 if (provider === 'gemini') {
                     apiKey = geminiApiKeyInput.val() || localStorage.getItem('gemini_api_key');
                     payload = { api_key: apiKey };
-                } else if (provider === 'openai') {
+                } else if (provider === 'openai' || provider === 'google') {
                     apiKey = openaiApiKeyInput.val() || localStorage.getItem('openai_api_key');
                     const baseUrl = openaiBaseUrlInput.val() || localStorage.getItem('openai_base_url');
                     payload = { api_key: apiKey };

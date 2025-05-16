@@ -87,7 +87,7 @@ def index():
         final_model_to_use = ui_custom_model_name if ui_custom_model_name else ui_selected_model_dropdown
 
         # 验证提供商和客户端加载情况
-        supported_providers = ['gemini', 'openai', 'volcano'] # Add new providers here
+        supported_providers = ['gemini', 'openai', 'volcano', 'google'] # Added 'google' provider
 
         if ui_llm_provider not in supported_providers:
              flash(f"不支持的 LLM 提供商: {ui_llm_provider}。", 'danger')
@@ -95,8 +95,9 @@ def index():
         elif ui_llm_provider == 'gemini' and not gemini_client:
             flash('Gemini 客户端未能加载，请检查服务器日志。', 'danger')
             ui_llm_provider = None # 无法处理
-        elif ui_llm_provider in ['openai', 'volcano'] and not openai_client: # Use openai_client for openai and volcano
-             flash(f'{ui_llm_provider} (OpenAI 兼容) 客户端未能加载，请检查服务器日志。', 'danger')
+        elif ui_llm_provider in ['openai', 'volcano', 'google'] and not openai_client: # Use openai_client for openai, volcano and google
+             provider_type = "Google" if ui_llm_provider == "google" else "OpenAI"
+             flash(f'{ui_llm_provider} ({provider_type} 兼容) 客户端未能加载，请检查服务器日志。', 'danger')
              ui_llm_provider = None # 无法处理
 
         if not ui_llm_provider:
@@ -162,8 +163,8 @@ def index():
                         try:
                             logging.info(f"正在分析图像: {image_path} (来自 {filename}) 使用 LLM: {ui_llm_provider}, 模型: {final_model_to_use or '默认'}, 系统提示: {final_system_prompt[:50]}...")
                             analysis = None
-                            if ui_llm_provider in ['openai', 'volcano']: # Use openai_client for openai and volcano
-                                # Use the UI provided base_url for both openai and volcano
+                            if ui_llm_provider in ['openai', 'volcano', 'google']: # Use openai_client for openai, volcano and google
+                                # Use the UI provided base_url for openai, volcano, and google
                                 analysis = openai_client.analyze_image_openai(
                                     image_path=image_path,
                                     system_prompt_override=final_system_prompt,
@@ -280,7 +281,7 @@ def get_models(provider):
     api_key = request.json.get('api_key') if request.is_json else request.form.get('api_key')
     base_url = request.json.get('base_url') if request.is_json else request.form.get('base_url') # For OpenAI and compatible
 
-    supported_providers = ['gemini', 'openai', 'volcano'] # Add new providers here
+    supported_providers = ['gemini', 'openai', 'volcano', 'google'] # Added 'google' provider
     if not provider or provider.lower() not in supported_providers:
         return jsonify({"error": "Invalid provider specified."}), 400
 
@@ -295,12 +296,15 @@ def get_models(provider):
             models_data = {"error": "Gemini client not loaded on server."}
             status_code = 503
             
-    elif provider.lower() in ['openai', 'volcano']: # Use openai_client for openai and volcano
+    elif provider.lower() in ['openai', 'volcano', 'google']: # Use openai_client for openai, volcano and google
         if openai_client:
-            # For volcano, use the specific base_url if not provided in the request
+            # For volcano and google, use specific base_url if not provided in the request
             if provider.lower() == 'volcano' and not base_url:
                  base_url = "https://ark.cn-beijing.volces.com/api/v3" # Default base_url for Volcano
                  logging.info(f"Using default base_url for Volcano: {base_url}")
+            elif provider.lower() == 'google' and not base_url:
+                 base_url = "https://generativelanguage.googleapis.com/v1" # Default base_url for Google
+                 logging.info(f"Using default base_url for Google: {base_url}")
 
             models_data = openai_client.list_openai_models(api_key_override=api_key, base_url_override=base_url)
             status_code = 200 if "models" in models_data else (500 if "error" in models_data else 200)
@@ -448,9 +452,10 @@ if __name__ == '__main__':
     llm_provider_on_startup = os.getenv('LLM_PROVIDER', 'gemini').lower()
     if llm_provider_on_startup == 'gemini' and not gemini_client:
         logging.error("错误: 配置使用 Gemini，但 gemini_client 未能加载。")
-    elif llm_provider_on_startup in ['openai', 'volcano'] and not openai_client: # Check for openai_client for openai and volcano
-        logging.error(f"错误: 配置使用 {llm_provider_on_startup}，但 {llm_provider_on_startup} (OpenAI 兼容) 客户端未能加载。")
-    elif llm_provider_on_startup not in ['gemini', 'openai', 'volcano']: # Add new providers here
+    elif llm_provider_on_startup in ['openai', 'volcano', 'google'] and not openai_client: # Check for openai_client for openai, volcano and google
+        provider_type = "Google" if llm_provider_on_startup == "google" else "OpenAI"
+        logging.error(f"错误: 配置使用 {llm_provider_on_startup}，但 {llm_provider_on_startup} ({provider_type} 兼容) 客户端未能加载。")
+    elif llm_provider_on_startup not in ['gemini', 'openai', 'volcano', 'google']: # Added 'google' provider
         logging.warning(f"警告: .env 文件中的 LLM_PROVIDER ('{llm_provider_on_startup}') 不是支持的提供商。将默认为 'gemini'。")
 
     app.run(debug=True, host='0.0.0.0', port=int(os.getenv('FLASK_RUN_PORT', 5000)))
